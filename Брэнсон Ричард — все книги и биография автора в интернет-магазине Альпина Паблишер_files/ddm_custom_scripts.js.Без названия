@@ -1,0 +1,415 @@
+window.digitalDataSettings = function() {
+    this.ajaxUrl         = "/ajax/digitalData/";
+    this.ajax_success    = false;
+    this.snippet_success = false;
+}
+
+window.digitalData = function() {
+    this.cart          = 'undefined';
+    this.page          = 'undefined';
+    this.user          = 'undefined';
+    this.version       = "1.1.3";
+    this.context       = 'undefined';
+    this.website       = {};
+    this.wishlist      = 'undefined';
+    this.changes       = {};
+}
+
+
+window.digitalData.prototype.Init = function() {
+    if(typeof runDDMScripts !== "undefined") {
+        runDDMScripts();
+    }
+    if(this.getPage()) {
+        //Поля для всех страниц
+        this.getContext();
+        this.getUser();
+        this.getCart();
+        this.getWishList();
+        this.getWebSite();
+
+        //Дальше правила для определенных категорий
+        if(this.page.category == "Confirmation") {
+            this.transaction = {};
+            //Вызов на странице подтверждения заказа
+        }
+    };
+};
+
+window.digitalData.prototype.CheckAjaxSuccess = function() {
+    $this = this;
+    if(this.cart        != 'undefined' &&
+       this.page        != 'undefined' &&
+       this.user        != 'undefined' &&
+       this.wishlist    != 'undefined' &&
+       this.context     != 'undefined' &&
+       !top.digitalDataSettings.ajax_success) {
+
+        //Дополнительные проверки для категорий
+        if(this.page.category == "Author Listing" || this.page.category == "Category Listing") {
+            if(typeof this.listing === 'undefined') {
+                return false;
+            }
+        }
+
+        if(this.page.category == "Product Detail") {
+            if(typeof this.product === 'undefined') {
+                return false;
+            } else if(this.product.length <= 0) {
+                return false;
+            }
+        }
+
+        if(this.page.category == "Confirmation") {
+            if(typeof this.transaction === 'undefined' || $.isEmptyObject(this.transaction)) {
+                return false;
+            }
+        }
+
+        if(this.page.category == "Checkout") {
+            // if(typeof this.cart.isLegalEntity === 'undefined') {
+            //     return false;
+            // }
+        }
+
+        if(this.page.category == "Blog Article") {
+            if(typeof this.page.blogArticleInfo === 'undefined') {
+                return false;
+            }
+        }
+
+        top.digitalDataSettings.ajax_success = true;
+        $.getScript("/js/ddm_snippet.js").done(function(script,textStatus) {
+            $this.afterSnippetConnect();
+            return true;
+        });
+    } else {
+        return false;
+    }
+};
+
+window.digitalData.prototype.getContext = function() {
+    $this = this;
+    $.ajax({
+        type: "POST",
+        dataType: "json",
+        url: top.digitalDataSettings.ajaxUrl,
+        async: true,
+        data: {action: "getContext"},
+        success: function(response) {
+            if(response.success) {
+                $this.context = {};
+                $this.context = response.context;
+                if(typeof response.registration !== undefined) {
+                    top.digitalDataSettings.registration = {};
+                    top.digitalDataSettings.registration = response.registration;
+                }
+                $this.CheckAjaxSuccess();
+            }
+        }
+    });
+}
+
+window.digitalData.prototype.getUser = function() {
+    $this = this;
+    $.ajax({
+        type: "POST",
+        dataType: "json",
+        url: top.digitalDataSettings.ajaxUrl,
+        async: true,
+        data: {action: "getUser"},
+        success: function(response) {
+            if(response.success) {
+                $this.user = response.user;
+                $this.CheckAjaxSuccess();
+            }
+            if(response.authorize == "Y") {
+                top.digitalDataSettings.authorized = true;
+            }
+        }
+    });
+};
+
+window.digitalData.prototype.getPage = function() {
+    if(typeof window.PageInfoForDDM !== 'undefined') {
+        this.page = {};
+        this.page.breadcrump = [];
+        this.page = window.PageInfoForDDM;
+        return true;
+    } else {
+        this.page = {};
+        this.page.category   = "content";
+        this.page.type       = "Content";
+        return true;
+    }
+};
+
+window.digitalData.prototype.getWebSite = function() {
+    this.website.websiteVersion = "";
+    if(location.host == "www.alpinabook.ru") {
+        this.website.environment = "production";
+    } else {
+        this.website.environment = "testing";
+    }
+    this.website.type = "responsive";
+    try {
+        $this = this;
+        $.ajax({
+            type: "POST",
+            dataType: "json",
+            url: top.digitalDataSettings.ajaxUrl,
+            async: false,
+            data: {action: "getWebsiteVersion"},
+            success: function(response) {
+                if(response.success) {
+                    var websiteVersion = response.websiteVersion;
+                    $this.website.websiteVersion = websiteVersion;
+                }
+            }
+        });
+    } catch(version_error) {
+        console.log(version_error);
+    }
+};
+
+window.digitalData.prototype.getWishList = function() {
+    $this = this;
+    $.ajax({
+        type: "POST",
+        dataType: "json",
+        url: top.digitalDataSettings.ajaxUrl,
+        async: true,
+        data: {action: "getWishList"},
+        success: function(response) {
+            if(response.success) {
+                $this.wishlist = response.wishlist;
+                $this.CheckAjaxSuccess();
+            }
+        }
+    });
+};
+
+window.digitalData.prototype.sendNewWishlist = function() {
+    $this = this;
+    $.ajax({
+        type: "POST",
+        dataType: "json",
+        url: top.digitalDataSettings.ajaxUrl,
+        async: true,
+        data: {action: "getWishList"},
+        success: function(response) {
+            if(response.success) {
+                top.digitalData.changes.push(['wishlist', response.wishlist]);
+            }
+        }
+    });
+};
+
+window.digitalData.prototype.getCart = function() {
+    $this = this;
+    $.ajax({
+        type: "POST",
+        dataType: "json",
+        url: top.digitalDataSettings.ajaxUrl,
+        async: true,
+        data: {action: "getCart"},
+        success: function(response) {
+            if(response.success) {
+                $this.cart = response.cart;
+                $this.CheckAjaxSuccess();
+            }
+        }
+    });
+};
+
+window.digitalData.prototype.getTransaction = function(order_id) {
+    if(typeof order_id !== 'undefined') {
+        order_id = parseInt(order_id);
+        if(order_id > 0) {
+            $this = this;
+            $.ajax({
+                type: "POST",
+                dataType: "json",
+                url: top.digitalDataSettings.ajaxUrl,
+                async: true,
+                data: {action: "getTransaction", order_id: order_id},
+                success: function(response) { console.log(response);
+                    if(response.success) {
+                        $this.transaction = response.transaction;
+                        $this.CheckAjaxSuccess();
+                    }
+                }
+            });
+        }
+    }
+};
+
+window.digitalData.prototype.getCartOrderInfo = function() {
+    if(typeof top.CartOrderInfoForDDM !== 'undefined') {
+        this.cart.isLegalEntity   = top.CartOrderInfoForDDM.isLegalEntity;
+        this.cart.paymentMethod   = top.CartOrderInfoForDDM.paymentMethod;
+        this.cart.shippingCost    = top.CartOrderInfoForDDM.shippingCost;
+        this.cart.shippingMethod  = top.CartOrderInfoForDDM.shippingMethod;
+        this.cart.shippingCost    = top.CartOrderInfoForDDM.shippingCost;
+        this.cart.total           = this.cart.total + top.CartOrderInfoForDDM.shippingCost;
+        $this.CheckAjaxSuccess();
+    }
+}
+
+window.digitalData.prototype.selectedPickupPoint = function(shippingCost) {
+    if(shippingCost !== 'undefined') {
+        $.ajax({
+            type: "POST",
+            dataType: "json",
+            url: top.digitalDataSettings.ajaxUrl,
+            async: true,
+            data: {action: "getCart"},
+            success: function(response) {
+                if(response.success) {
+                    cart = response.cart;
+                    cart.isLegalEntity   = top.digitalData.cart.isLegalEntity;
+                    cart.paymentMethod   = top.digitalData.cart.paymentMethod;
+                    cart.shippingMethod  = top.digitalData.cart.shippingMethod;
+                    cart.shippingCost = shippingCost;
+                    cart.total = response.cart.total + shippingCost;
+                    digitalData.events.push({
+                      "category": "Ecommerce",
+                      "name": "Selected Pickup Point",
+                      "cart": cart
+                    });
+                    digitalData.changes.push(['cart', cart]);
+                }
+            }
+        });
+    }
+}
+
+window.digitalData.prototype.changeCartOrderInfo = function() {
+    if(typeof top.ChangeCartOrderInfoForDDM !== 'undefined') {
+        var cart = {},
+            total = {};
+
+        if(typeof digitalData !== 'undefined' && typeof digitalData.push !== 'undefined') {
+            $.ajax({
+                type: "POST",
+                dataType: "json",
+                url: top.digitalDataSettings.ajaxUrl,
+                async: true,
+                data: {action: "getCart"},
+                success: function(response) {
+                    if(response.success) {
+                        cart = response.cart;
+                        total = response.cart.total;
+                    }
+                }
+            });
+
+            if(top.digitalDataTempPaymentMethod != top.ChangeCartOrderInfoForDDM.cart.paymentMethod) {
+                cart.shippingMethod = top.ChangeCartOrderInfoForDDM.cart.shippingMethod;
+                cart.shippingCost = top.ChangeCartOrderInfoForDDM.cart.shippingCost;
+                cart.paymentMethod = top.ChangeCartOrderInfoForDDM.cart.paymentMethod;
+                cart.total = total + cart.shippingCost;
+                top.digitalData.changes.push(['cart', cart]);
+
+                digitalData.events.push({
+                  category: 'Ecommerce',
+                  name: 'Selected Payment Method',
+                  paymentMethod: top.ChangeCartOrderInfoForDDM.cart.paymentMethod
+                });
+                top.digitalDataTempPaymentMethod = top.ChangeCartOrderInfoForDDM.cart.paymentMethod;
+            };
+
+            if(top.digitalDataTempShippingMethod != top.ChangeCartOrderInfoForDDM.cart.shippingMethod) {
+                cart.shippingMethod = top.ChangeCartOrderInfoForDDM.cart.shippingMethod;
+                cart.shippingCost = top.ChangeCartOrderInfoForDDM.cart.shippingCost;
+                cart.paymentMethod = top.ChangeCartOrderInfoForDDM.cart.paymentMethod;
+                cart.totaltest = total;
+                cart.total = total + cart.shippingCost;
+                top.digitalData.changes.push(['cart', cart]);
+
+                digitalData.events.push({
+                  category: 'Ecommerce',
+                  name: 'Selected Shipping Method',
+                  shippingMethod: top.ChangeCartOrderInfoForDDM.cart.shippingMethod,
+                  shippingCost: top.ChangeCartOrderInfoForDDM.cart.shippingCost
+                });
+                top.digitalDataTempShippingMethod = top.CartOrderInfoForDDM.shippingMethod;
+            };
+        }
+    }
+}
+
+/*window.digitalData.prototype.getListing = function() {
+    if(typeof window.ListingInfoForDDM !== 'undefined') {
+        this.listing = window.ListingInfoForDDM;
+        this.CheckAjaxSuccess();
+        return true;
+    } else {
+        return false;
+    }
+};*/
+
+window.digitalData.prototype.sendNewListing = function(newListing) {
+    if(typeof newListing !== 'undefined') {
+        digitalData.changes.push(['listing', newListing]);
+    }
+};
+
+window.digitalData.prototype.changeBookList = function(newBookIDs) {
+    if(typeof newBookIDs != 'undefined') {
+        $.ajax({
+            type: "POST",
+            dataType: "json",
+            url: top.digitalDataSettings.ajaxUrl,
+            async: true,
+            data: {action: "changeBookList", newBookIDs: newBookIDs},
+            success: function(response) {
+                if(response.success) {
+                    digitalData.changes.push(['listing.items', response.items]);
+                }
+            }
+        });
+    }
+};
+
+
+window.digitalData.prototype.afterSnippetConnect = function() {
+    if(typeof digitalData !== 'undefined') {
+
+        if(typeof top.digitalDataSettings.registration !== 'undefined') {
+            if(top.digitalDataSettings.registration) {
+                digitalData.events.push({
+                    category: "Auth",
+                    name: "Registered",
+                    user: {
+                        subscriptions: [{
+                            type: 'email',
+                            isSubscribed: top.digitalDataSettings.registration.subscribtion
+                        }]
+                    }
+                });
+                top.digitalDataSettings.registration = {};
+            }
+        }
+
+        if(typeof top.digitalDataSettings.authorized !== 'undefined') {
+            if(top.digitalDataSettings.authorized) {
+                digitalData.events.push({
+                    "category": "Auth",
+                    "name": "Logged In"
+                });
+                top.digitalDataSettings.authorized = {};
+            }
+        }
+    }
+};
+
+$(document).ready(function() {
+    //runAfterComplete(function() {
+        if(!(typeof top.stopDigitalDataCreating !== 'undefined' && top.stopDigitalDataCreating)) {
+            window.digitalDataSettings = new digitalDataSettings();
+            window.digitalData = new digitalData();
+            window.digitalData.Init();
+        }
+    //}, 120);
+});
